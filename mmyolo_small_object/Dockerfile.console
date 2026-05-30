@@ -1,0 +1,63 @@
+# syntax=docker/dockerfile:1
+FROM pytorch/pytorch:2.0.1-cuda11.7-cudnn8-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV YOLO_CONFIG_DIR=/tmp
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PYTHONPATH=/workspace/project/mmyolo_small_object
+ENV TRAINER_PROJECT_ROOT=/workspace/project
+ENV TRAINER_STATE_ROOT=/workspace/project/mmyolo_small_object/runtime
+ENV TRAINER_BROWSE_ROOTS=/workspace/project:/home/dataList:/hosthome:/hosttmp:/tmp
+ENV TRAINER_DATASET_SCAN_ROOT=/home/dataList
+ENV TRAINER_HOST=0.0.0.0
+ENV TRAINER_PORT=18080
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,utility
+ENV MMCV_INDEX_URL=https://download.openmmlab.com/mmcv/dist/cu117/torch2.0.0/index.html
+
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt/lists,sharing=locked \
+    apt-get update && apt-get install -y \
+    ffmpeg \
+    tzdata \
+    git \
+    gcc \
+    g++ \
+    build-essential \
+    ninja-build \
+    libsm6 \
+    libxext6 \
+    libgl1 \
+    libglib2.0-0
+
+WORKDIR /workspace/project/mmyolo_small_object
+
+COPY mmyolo_small_object/requirements.txt /tmp/mmyolo_requirements.txt
+COPY mmyolo_small_object/requirements-console.txt /tmp/console_requirements.txt
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /tmp/console_requirements.txt
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install "openmim>=0.3.9" "numpy<2" psutil ninja
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir "mmengine>=0.7.1,<1.0.0" && \
+    pip install --no-cache-dir "mmcv==2.0.1" -f "${MMCV_INDEX_URL}" && \
+    pip install --no-cache-dir "mmdet>=3.0.0,<3.1.0"
+
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r /tmp/mmyolo_requirements.txt
+
+# Force headless OpenCV in the training console image.
+# The GUI-enabled wheel pulls Qt runtime dependencies that are unnecessary here
+# and can break `import cv2` inside minimal server containers.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip uninstall -y opencv-python opencv-contrib-python opencv-contrib-python-headless opencv-python-headless || true && \
+    pip install --no-cache-dir "numpy<2" "opencv-python-headless>=4.8,<5"
+
+EXPOSE 18080
+
+CMD ["python", "-m", "trainer_console.main"]

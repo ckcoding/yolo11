@@ -1,0 +1,41 @@
+services:
+  mmyolo-trainer-console:
+    build:
+      context: ..
+      dockerfile: mmyolo_small_object/Dockerfile.console
+    container_name: mmyolo_trainer_console
+    restart: unless-stopped
+    init: true
+    # ★ 解决 PyTorch DataLoader Bus Error: 共享内存必须足够大
+    shm_size: '8g'
+    working_dir: /workspace/project/mmyolo_small_object
+    command: ["python", "-m", "trainer_console.main"]
+    ports:
+      - "18080:18080"
+    volumes:
+      - ..:/workspace/project
+      - ${HOME}:/hosthome
+      - /tmp:/hosttmp
+      - /home/dataList:/home/dataList
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONPATH=/workspace/project/mmyolo_small_object
+      - TRAINER_PROJECT_ROOT=/workspace/project
+      - TRAINER_STATE_ROOT=/workspace/project/mmyolo_small_object/runtime
+      - TRAINER_BROWSE_ROOTS=/workspace/project:/home/dataList:/hosthome:/hosttmp:/tmp
+      - TRAINER_DATASET_SCAN_ROOT=/home/dataList
+      - TRAINER_HOST=0.0.0.0
+      - TRAINER_PORT=18080
+      - TRAINER_RELOAD=0
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+      - NVIDIA_VISIBLE_DEVICES=${NVIDIA_VISIBLE_DEVICES:-all}
+      - NVIDIA_DRIVER_CAPABILITIES=${NVIDIA_DRIVER_CAPABILITIES:-compute,utility}
+    # ★ 声明 GPU 设备，否则容器内无法使用 CUDA
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, compute, utility]

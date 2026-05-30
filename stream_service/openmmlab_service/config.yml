@@ -1,0 +1,89 @@
+# ==========================================
+# OpenMMLab 版视觉分析服务配置
+# 基于现有接口兼容改造，模型定义改为 config + checkpoint
+# ==========================================
+
+# 1. 服务端运行参数
+server:
+  # Uvicorn 监听地址
+  host: "0.0.0.0"
+  # 给前端/客户端连接 WebSocket、FLV 使用的公网或局域网 IP
+  base_host: "127.0.0.1"
+  # API 服务端口
+  port: 18018
+  # 返回给客户端的对外地址。部署到反向代理时优先改这 3 个。
+  public_api_base: "http://127.0.0.1:18018"
+  public_ws_base: "ws://127.0.0.1:18018"
+  public_zlm_base: "http://127.0.0.1:18080"
+  # 容器内 FFmpeg 推流给 ZLM 时使用的内部地址
+  internal_rtmp_host: "127.0.0.1"
+  rtmp_port: 1935
+  rtsp_port: 554
+  zlm_http_port: 8080
+  reload: false
+  cors_allow_origins:
+    - "*"
+  # 全局目标输出帧率。若源视频高于该值，将按比例丢帧并保持“输出一帧就检测一帧”；若源视频更低，则按源帧率全帧处理。
+  output_fps: 15
+  # 每张 GPU 最大允许同时推流的视频路数（用于流控令牌分配）
+  max_streams_per_gpu: 4
+  artifacts_dir: "./artifacts"
+
+# 2. OpenMMLab 模型挂载池
+models:
+  # OpenMMLab 默认阈值与 batch。具体模型可覆盖。
+  batch_size: 2
+  score_thr: 0.25
+  # config 指向 MMDetection/MMYOLO 的配置文件，checkpoint 指向权重。
+  # classes 建议显式写出来，避免 checkpoint 元信息缺失时无法映射标签。
+  items:
+    - id: "drone_person"
+      config: "/workspace/models/drone_person.py"
+      checkpoint: "/workspace/models/drone_person.pth"
+      classes: ["drone_people"]
+      batch_size: 2
+      score_thr: 0.25
+    - id: "drone_car"
+      config: "/workspace/models/drone_car.py"
+      checkpoint: "/workspace/models/drone_car.pth"
+      classes: ["drone_car"]
+      batch_size: 2
+      score_thr: 0.25
+    - id: "drone_zdjy"
+      config: "/workspace/models/drone_zdjy.py"
+      checkpoint: "/workspace/models/drone_zdjy.pth"
+      classes: ["drone_zdjy"]
+      batch_size: 2
+      score_thr: 0.25
+    - id: "drone_smokes"
+      config: "/workspace/models/drone_smokes.py"
+      checkpoint: "/workspace/models/drone_smokes.pth"
+      classes: ["drone_smokes"]
+      batch_size: 2
+      score_thr: 0.25
+    - id: "drone_fire"
+      config: "/workspace/models/drone_fire.py"
+      checkpoint: "/workspace/models/drone_fire.pth"
+      classes: ["drone_fire"]
+      batch_size: 2
+      score_thr: 0.25
+
+# 3. 抓拍图片库与事件推送
+minio:
+  # 关闭后所有抓拍和识别结果图都会直接落本地 /artifacts 静态目录
+  enabled: false
+  endpoint: "127.0.0.1:9000"
+  public_base: "http://127.0.0.1:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "yolo-snapshots"
+
+# 4. 标签显示名
+labels:
+  display_names:
+    drone_people: "人员检测"
+    drone_car: "车辆"
+    drone_zdjy: "占道经营"
+    drone_smokes: "烟雾"
+    drone_fire: "火灾"
+    

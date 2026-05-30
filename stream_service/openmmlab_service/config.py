@@ -1,0 +1,291 @@
+import os
+from pathlib import Path
+
+import torch
+import yaml
+
+SERVICE_DIR = Path(__file__).resolve().parent
+PROJECT_DIR = SERVICE_DIR.parent if (SERVICE_DIR.parent / "fonts").exists() else SERVICE_DIR
+CWD_DIR = Path.cwd()
+
+CONFIG_YAML_PATH = SERVICE_DIR / "config.yml"
+_cfg = {}
+if CONFIG_YAML_PATH.exists():
+    with CONFIG_YAML_PATH.open("r", encoding="utf-8") as f:
+        _cfg = yaml.safe_load(f) or {}
+
+
+def get_conf(section, key, default=None):
+    sec = _cfg.get(section)
+    if not isinstance(sec, dict):
+        sec = {}
+    return sec.get(key, default)
+
+
+def _get_env_or_conf(env_key, section, key, default=None):
+    value = os.environ.get(env_key)
+    if value not in (None, ""):
+        return value
+    return get_conf(section, key, default)
+
+
+def _as_bool(value, default=False):
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _as_int(value, default):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_float(value, default):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _as_origins(value):
+    if isinstance(value, str):
+        items = [item.strip() for item in value.split(",") if item.strip()]
+        return items or ["*"]
+    if isinstance(value, list):
+        items = [str(item).strip() for item in value if str(item).strip()]
+        return items or ["*"]
+    return ["*"]
+
+
+def _as_label_list(value):
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        return [item.strip() for item in value.split(",") if item.strip()]
+    if isinstance(value, (list, tuple, set)):
+        return [str(item).strip() for item in value if str(item).strip()]
+    return []
+
+
+def _normalize_base_url(value):
+    return str(value).rstrip("/")
+
+
+def _normalize_url_path(value, default):
+    if value in (None, ""):
+        return default
+    cleaned = "/" + str(value).strip().strip("/")
+    return cleaned if cleaned != "/" else default
+
+
+TORCH_VERSION = getattr(torch, "__version__", "unknown")
+TORCH_CUDA_VERSION = getattr(torch.version, "cuda", None) or "cpu"
+FORCE_CPU = _as_bool(os.environ.get("FORCE_CPU"), False)
+
+
+def _load_label_display_names():
+    raw_mapping = get_conf("labels", "display_names", {})
+    if not isinstance(raw_mapping, dict):
+        return {}
+
+    normalized = {}
+    for raw_label, raw_name in raw_mapping.items():
+        label = str(raw_label).strip()
+        name = str(raw_name).strip()
+        if label and name:
+            normalized[label] = name
+    return normalized
+
+
+LABEL_DISPLAY_NAMES = _load_label_display_names()
+
+
+def get_label_display_name(label: str) -> str:
+    return LABEL_DISPLAY_NAMES.get(str(label).strip(), str(label).strip())
+
+
+def resolve_path(raw_path):
+    if raw_path in (None, ""):
+        return ""
+
+    raw = str(raw_path).strip()
+    path = Path(raw)
+    candidates = []
+
+    if path.is_absolute():
+        candidates.append(path)
+        try:
+            workspace_relative = path.relative_to("/workspace")
+        except ValueError:
+            workspace_relative = None
+        if workspace_relative is not None:
+            candidates.extend(
+                [
+                    SERVICE_DIR / workspace_relative,
+                    PROJECT_DIR / workspace_relative,
+                    CWD_DIR / workspace_relative,
+                ]
+            )
+    else:
+        candidates.extend(
+            [
+                SERVICE_DIR / path,
+                PROJECT_DIR / path,
+                CWD_DIR / path,
+            ]
+        )
+
+    seen = set()
+    for candidate in candidates:
+        candidate = candidate.resolve()
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return str(candidate)
+
+    return raw
+
+
+def _load_model_specs():
+    default_batch_size = max(1, _as_int(get_conf("models", "batch_size", 1), 1))
+    default_score_thr = max(0.0, _as_float(get_conf("models", "score_thr", 0.25), 0.25))
+    raw_items = get_conf("models", "items", [])
+    entries = []
+
+    for idx, item in enumerate(raw_items or []):
+        if not isinstance(item, dict):
+            continue
+
+        raw_config = item.get("config")
+        raw_checkpoint = item.get("checkpoint") or item.get("path")
+        if not raw_config or not raw_checkpoint:
+            continue
+
+        config_path = resolve_path(raw_config)
+        checkpoint_path = resolve_path(raw_checkpoint)
+        if not config_path or not checkpoint_path:
+            continue
+
+        model_id = str(item.get("id", "")).strip() or Path(str(raw_checkpoint)).stem
+        batch_size = max(1, _as_int(item.get("batch_size", default_batch_size), default_batch_size))
+        score_thr = max(0.0, _as_float(item.get("score_thr", default_score_thr), default_score_thr))
+        classes = _as_label_list(item.get("classes") or item.get("labels"))
+
+        entries.append(
+            {
+                "id": model_id or f"model_{idx + 1}",
+                "config": config_path,
+                "checkpoint": checkpoint_path,
+                "batch_size": batch_size,
+                "score_thr": score_thr,
+                "classes": classes,
+            }
+        )
+
+    unique_entries = []
+    duplicate_entries = []
+    seen = set()
+    for entry in entries:
+        key = (entry["id"], entry["config"], entry["checkpoint"])
+        if key in seen:
+            duplicate_entries.append({"id": entry["id"], "config": entry["config"], "checkpoint": entry["checkpoint"]})
+            continue
+        seen.add(key)
+        unique_entries.append(entry)
+    return unique_entries, duplicate_entries
+
+
+MODEL_SPECS, DUPLICATE_MODEL_SPECS = _load_model_specs()
+MODEL_REFERENCES = [{"id": spec["id"], "config": spec["config"], "checkpoint": spec["checkpoint"]} for spec in MODEL_SPECS]
+
+FONT_PATH = resolve_path("fonts/Alimama_ShuHeiTi_Bold.ttf")
+
+
+def _detect_cuda_runtime():
+    if FORCE_CPU:
+        print("[Config] 检测到 FORCE_CPU=1，已跳过 CUDA 探测并强制使用 CPU 模式")
+        return False, 0, 0
+
+    raw_gpu_count = 0
+    try:
+        raw_gpu_count = torch.cuda.device_count()
+    except Exception as exc:
+        print(f"[Config] 读取 CUDA 设备数量失败，将回退 CPU: {exc}")
+        return False, 0, 0
+
+    try:
+        cuda_available = bool(torch.cuda.is_available())
+    except Exception as exc:
+        print(f"[Config] 检测 CUDA 可用性失败，将回退 CPU: {exc}")
+        return False, 0, raw_gpu_count
+
+    if not cuda_available:
+        return False, 0, raw_gpu_count
+    return True, raw_gpu_count, raw_gpu_count
+
+
+CUDA_AVAILABLE, GPU_COUNT, RAW_GPU_COUNT = _detect_cuda_runtime()
+
+SERVER_HOST = _get_env_or_conf("SERVER_HOST", "server", "host", "0.0.0.0")
+SERVER_PORT = _as_int(_get_env_or_conf("SERVER_PORT", "server", "port", 8008), 8008)
+PUBLIC_HOST = _get_env_or_conf("BASE_HOST", "server", "base_host", "127.0.0.1")
+PUBLIC_API_BASE = _normalize_base_url(
+    _get_env_or_conf("PUBLIC_API_BASE", "server", "public_api_base", f"http://{PUBLIC_HOST}:{SERVER_PORT}")
+)
+PUBLIC_WS_BASE = _normalize_base_url(
+    _get_env_or_conf("PUBLIC_WS_BASE", "server", "public_ws_base", f"ws://{PUBLIC_HOST}:{SERVER_PORT}")
+)
+ZLM_HTTP_PORT = _as_int(_get_env_or_conf("ZLM_HTTP_PORT", "server", "zlm_http_port", 18080), 18080)
+PUBLIC_ZLM_BASE = _normalize_base_url(
+    _get_env_or_conf("PUBLIC_ZLM_BASE", "server", "public_zlm_base", f"http://{PUBLIC_HOST}:{ZLM_HTTP_PORT}")
+)
+INTERNAL_RTMP_HOST = _get_env_or_conf("INTERNAL_RTMP_HOST", "server", "internal_rtmp_host", "127.0.0.1")
+RTMP_PORT = _as_int(_get_env_or_conf("RTMP_PORT", "server", "rtmp_port", 1935), 1935)
+RTSP_PORT = _as_int(_get_env_or_conf("RTSP_PORT", "server", "rtsp_port", 554), 554)
+UVICORN_RELOAD = _as_bool(_get_env_or_conf("UVICORN_RELOAD", "server", "reload", False), False)
+
+OUTPUT_FPS = max(1.0, _as_float(get_conf("server", "output_fps", 15), 15.0))
+MAX_STREAMS_PER_GPU = max(1, _as_int(get_conf("server", "max_streams_per_gpu", 4), 4))
+
+CORS_ALLOW_ORIGINS = _as_origins(_get_env_or_conf("CORS_ALLOW_ORIGINS", "server", "cors_allow_origins", ["*"]))
+CORS_ALLOW_CREDENTIALS = "*" not in CORS_ALLOW_ORIGINS
+
+ARTIFACTS_DIR = Path(
+    resolve_path(_get_env_or_conf("ARTIFACTS_DIR", "server", "artifacts_dir", str(SERVICE_DIR / "artifacts")))
+)
+ARTIFACTS_URL_PREFIX = _normalize_url_path(
+    _get_env_or_conf("ARTIFACTS_URL_PREFIX", "server", "artifacts_url_prefix", "/artifacts"),
+    "/artifacts",
+)
+SNAPSHOT_DIR = ARTIFACTS_DIR / "snapshots"
+PROCESSED_DIR = ARTIFACTS_DIR / "processed"
+INPUTS_DIR = ARTIFACTS_DIR / "inputs"
+for _dir in (ARTIFACTS_DIR, SNAPSHOT_DIR, PROCESSED_DIR, INPUTS_DIR):
+    _dir.mkdir(parents=True, exist_ok=True)
+
+MINIO_ENABLED = _as_bool(_get_env_or_conf("MINIO_ENABLED", "minio", "enabled", True), True)
+MINIO_ENDPOINT = _get_env_or_conf("MINIO_ENDPOINT", "minio", "endpoint", "127.0.0.1:9000")
+MINIO_PUBLIC_BASE = _normalize_base_url(
+    _get_env_or_conf("MINIO_PUBLIC_BASE", "minio", "public_base", f"http://{PUBLIC_HOST}:9000")
+)
+MINIO_ACCESS_KEY = _get_env_or_conf("MINIO_ACCESS_KEY", "minio", "access_key", "minioadmin")
+MINIO_SECRET_KEY = _get_env_or_conf("MINIO_SECRET_KEY", "minio", "secret_key", "minioadmin")
+MINIO_BUCKET = _get_env_or_conf("MINIO_BUCKET", "minio", "bucket", "yolo-snapshots")
+
+print(f"[Config] 已载入 OpenMMLab 模型配置，共 {len(MODEL_SPECS)} 个模型: {MODEL_REFERENCES}")
+print(
+    f"[Config] Torch={TORCH_VERSION}, Torch CUDA={TORCH_CUDA_VERSION}, "
+    f"CUDA_AVAILABLE={CUDA_AVAILABLE}, RAW_GPU_COUNT={RAW_GPU_COUNT}, FORCE_CPU={FORCE_CPU}"
+)
+if DUPLICATE_MODEL_SPECS:
+    print(f"[Config] 已忽略重复模型配置: {DUPLICATE_MODEL_SPECS}")
+if not CUDA_AVAILABLE and RAW_GPU_COUNT > 0:
+    print(
+        "[Config] 检测到宿主机存在 GPU，但当前 PyTorch/CUDA 运行时不可用，"
+        "服务将自动回退到 CPU 模式。请检查 NVIDIA 驱动版本是否与容器内 torch 匹配。"
+    )

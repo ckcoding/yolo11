@@ -1,0 +1,10 @@
+openmim>=0.3.9
+numpy<2
+mmengine>=0.7.1,<1.0.0
+mmcv>=2.0.1,<2.1.0
+mmdet>=3.0.0,<3.1.0
+mmyolo==0.6.0
+pycocotools>=2.0.7
+Pillow>=10.0
+PyYAML>=6.0
+opencv-python-headless>=4.8,<5

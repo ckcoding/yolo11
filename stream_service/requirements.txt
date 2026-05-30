@@ -1,0 +1,19 @@
+fastapi==0.110.0
+uvicorn[standard]==0.29.0
+pydantic==2.6.4
+ultralytics>=8.3.0
+Pillow==10.2.0
+python-multipart==0.0.9
+numpy<2.0
+opencv-python-headless
+minio==7.2.5
+websockets>=12.0
+# 配置文件读取
+PyYAML>=6.0
+
+# TensorRT / ONNX 导出依赖
+onnx>=1.12.0
+onnxslim>=0.1.71
+onnxruntime-gpu
+tensorrt==10.16.0.72
+tensorrt-cu12==10.16.0.72

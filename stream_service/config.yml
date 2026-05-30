@@ -1,0 +1,95 @@
+# ==========================================
+# 🚀 AI 视觉分析监控中心核心配置文件 
+# 当配置、新模型有变动时，无需重新构建镜像，重启 docker-compose 即可
+# ==========================================
+
+# 1. 服务端运行参数
+server:
+  # Uvicorn 监听地址
+  host: "0.0.0.0"
+  # 给前端/客户端连接 WebSocket、FLV 使用的公网或局域网 IP
+  base_host: "127.0.0.1"
+  # API 服务端口
+  port: 18008
+  # 返回给客户端的对外地址。部署到反向代理时优先改这 3 个。
+  public_api_base: "http://127.0.0.1:18008"
+  public_ws_base: "ws://127.0.0.1:18008"
+  public_zlm_base: "http://127.0.0.1:18080"
+  # 容器内 FFmpeg 推流给 ZLM 时使用的内部地址
+  internal_rtmp_host: "127.0.0.1"
+  rtmp_port: 1935
+  rtsp_port: 554
+  zlm_http_port: 8080
+  reload: false
+  cors_allow_origins:
+    - "*"
+  # 全局目标输出帧率。若源视频高于该值，将按比例丢帧并保持“输出一帧就检测一帧”；若源视频更低，则按源帧率全帧处理。
+  output_fps: 15
+  # 每张 GPU 最大允许同时推流的视频路数（用于流控令牌分配）
+  max_streams_per_gpu: 5
+
+# 2. 模型挂载池
+models:
+  # 默认批量大小。也可在具体模型上覆盖。
+  batch_size: 4
+  # ─── 推理精度与速度控制 ───
+  # 默认推理输入分辨率。无人机场景推荐 640（配合 P2 增强头既快又准）。
+  # 方案 A: imgsz=1024 + 标准头（速度慢，精度高）
+  # 方案 B: imgsz=640  + P2 增强头（速度快，精度相近）← 推荐
+  imgsz: 640
+  # 是否开启 FP16 半精度推理。GPU 上可提升约 2x 速度，精度损失对小目标几乎可忽略。
+  half: true
+  # 是否使用 TensorRT 加速引擎（需要 tensorrt 已安装）。
+  # ⚠️ TensorRT 10.16 存在 cuTensor permutate 底层内核 Bug (CUDA 12.1 + RTX 4090)，
+  #    推理时会触发 IExecutionContext::executeV2 Error Code 1，暂时无法使用。
+  #    等待 TensorRT 10.17+ 修复后再开启。当前 FP16 已可达 17-25ms 极速。
+  use_tensorrt: false
+  # NMS-Free 模式（YOLO26+ 专用）。开启后跳过后处理 NMS 步骤，实现端到端直出。
+  # 传统 YOLOv8/v11 请保持 false；升级到 YOLO26 后设 true 可获得显著提速。
+  nms_free: false
+  # ─── SAHI 切片推理（高空无人机 4K 画面专用）───
+  # 当无人机飞行高度很高时，小目标在 4K 画面中极难检测。
+  # 开启后自动将大图切成 slice_size 的小块逐块检测，再合并结果。
+  # 注意：SAHI 会将 FPS 降至 5-10，仅在高空且需要极高召回率时开启。
+  sahi_enabled: false
+  sahi_slice_size: 640
+  sahi_overlap_ratio: 0.25
+  # 把外部主机的 models/ 映射到了容器内的 /workspace/models/
+  # 每个模型独立加载为一个 Worker，按目标标签动态分发请求。
+  items:
+    - id: "drone_person"
+      path: "/workspace/models/drone_person.pt"
+      batch_size: 4
+    - id: "drone_car"
+      path: "/workspace/models/drone_car.pt"
+      batch_size: 4
+    - id: "drone_zdjy"
+      path: "/workspace/models/drone_zdjy.pt"
+      batch_size: 4
+    - id: "drone_smokes"
+      path: "/workspace/models/drone_smokes.pt"
+      batch_size: 4
+    - id: "drone_fire"
+      path: "/workspace/models/drone_fire.pt"
+      batch_size: 4
+      
+
+# 3. 抓拍图片库与事件推送
+minio:
+  # 关闭后所有抓拍和识别结果图都会直接落本地 /artifacts 静态目录
+  enabled: false
+  endpoint: "127.0.0.1:9000"
+  public_base: "http://127.0.0.1:9000"
+  access_key: "minioadmin"
+  secret_key: "minioadmin"
+  bucket: "yolo-snapshots"
+
+# 4. 标签显示名
+labels:
+  display_names:
+    drone_people: "人员检测"
+    drone_car: "车辆"
+    drone_zdjy: "占道经营"
+    drone_smokes: "烟雾"
+    drone_fire: "火灾"
+    

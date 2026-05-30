@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO11 无人机多路侦测推流大屏</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #0f172a; color: #f8fafc; padding: 20px; }
+        h1 { color: #38bdf8; text-align: center; }
+        .container { display: flex; flex-direction: row; gap: 20px; justify-content: center; flex-wrap: wrap; }
+        .form-section { background: #1e293b; padding: 20px; border-radius: 8px; width: 350px; border: 1px solid #334155; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; color: #94a3b8; }
+        input[type="text"], input[type="number"] { width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #475569; background: #0f172a; color: #f8fafc; box-sizing: border-box; }
+        input[type="checkbox"] { margin-right: 5px; }
+        button { background: #0ea5e9; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px; transition: 0.2s; }
+        button:hover { background: #0284c7; }
+        button.stop-btn { background: #ef4444; margin-top: 10px; }
+        button.stop-btn:hover { background: #dc2626; }
+        .video-section { flex: 1; min-width: 400px; display: flex; flex-direction: column; align-items: center; }
+        .video-container { background: #000; width: 100%; max-width: 800px; aspect-ratio: 16/9; border-radius: 8px; border: 2px solid #334155; overflow: hidden; display: flex; justify-content: center; align-items: center; }
+        #video-feed { width: 100%; height: 100%; object-fit: contain; display: none; }
+        .status { margin-top: 10px; color: #94a3b8; font-family: monospace; }
+    </style>
+</head>
+<body>
+
+<h1>YOLO11 目标检测实时推流控制台</h1>
+
+<div class="container">
+    <div class="form-section">
+        <h3>多媒体启动参数配置</h3>
+        <div class="form-group">
+            <label for="stream_url">请输入收流地址 (支持RTMP/RTSP或者摄像头编号)</label>
+            <input type="text" id="stream_url" value="rtmp://192.168.3.231:1935/live/1">
+        </div>
+        <div class="form-group">
+            <label for="model_name">选择要秒切的检测源 (开机已加载在显存内存中)：</label>
+            <select id="model_name" style="width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #ccc;">
+                <option value="">正在请求服务器已预热就绪引擎...</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label for="names_dict">设定过滤目标字典词 (如drone_person)</label>
+            <input type="text" id="names_dict" value="drone_person">
+        </div>
+        <div class="form-group">
+            <label for="alias">全局显示前缀别名</label>
+            <input type="text" id="alias" value="zhangsan">
+        </div>
+        <div class="form-group">
+            <label for="conf_thres">物体识别容差度 (0.0~1.0)</label>
+            <input type="number" step="0.05" id="conf_thres" value="0.5">
+        </div>
+        <div class="form-group">
+            <label><input type="checkbox" id="confidence_display"> 图上类别名显示开关</label>
+        </div>
+        <button id="start-btn" onclick="startDetection()">启动推流侦测部署</button>
+        <button id="stop-btn" class="stop-btn" onclick="stopDetection()" style="display:none;">切断停止侦测视频流接口</button>
+        <div class="status" id="status-msg">准备就绪，欢迎使用大屏终端。</div>
+        <div class="status" id="task-id-disp"></div>
+    </div>
+
+    <div class="video-section">
+        <div class="video-container">
+            <span id="placeholder" style="color: #64748b;">监控画面还未串流抵达...请于侧边栏勾选配置开始发信</span>
+            <img id="video-feed" src="" alt="Live Feed">
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentTaskId = null;
+    let ws = null;
+
+    // 【新增架构：完全无感静默热切指令发射器】
+    async function silentUpdateLiveStream() {
+        const payload = {
+            model_name: document.getElementById('model_name').value,
+            names_dict: document.getElementById('names_dict').value,
+            alias: document.getElementById('alias').value,
+            conf_thres: parseFloat(document.getElementById('conf_thres').value),
+            confidence_display: document.getElementById('confidence_display').checked
+        };
+        try {
+            // 悄无声息地下发热替换包，视频推流不会中断，画面也不会闪烁
+            await fetch(`/api/update_detection/${currentTaskId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            console.log(`[无感热替换] 成功切至 -> ${payload.model_name}`);
+        } catch (err) {
+            console.error("热切数据管线遭到阻断", err);
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', async () => {
+        // 给所有大屏侧边栏的面板控件偷偷装上顺风耳，一旦发生修改就秒级映射给后台后端字典和引擎
+        const triggerUpdateFields = ['model_name', 'names_dict', 'alias', 'conf_thres', 'confidence_display'];
+        triggerUpdateFields.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) {
+                // 当用户改变输入框或下拉框并移开鼠标/点击瞬间触发
+                el.addEventListener('change', () => {
+                    // 仅当屏幕上正有视频流播放时，才采取静默热切 (否则纯改参数没意义)
+                    if (currentTaskId) {
+                        silentUpdateLiveStream();
+                    }
+                });
+            }
+        });
+
+        try {
+            const response = await fetch('/api/models');
+            const data = await response.json();
+            const selectEl = document.getElementById('model_name');
+            selectEl.innerHTML = '';
+            if (data.models && data.models.length > 0) {
+                data.models.forEach(model => {
+                    const option = document.createElement('option');
+                    option.value = model;
+                    option.textContent = model + " [光速就绪]";
+                    selectEl.appendChild(option);
+                });
+            } else {
+                selectEl.innerHTML = '<option value="">模型文件夹为空，无法获取驱动力！</option>';
+                document.getElementById('start-btn').disabled = true;
+            }
+        } catch (err) {
+            console.error("未能同步预载模型：", err);
+        }
+    });
+
+    async function startDetection() {
+        if (currentTaskId) {
+            alert("正在侦测中的系统不容许发起新的操作，烦请首先截断关闭旧请求。");
+            return;
+        }
+
+        const payload = {
+            stream_url: document.getElementById('stream_url').value,
+            model_name: document.getElementById('model_name').value,
+            names_dict: document.getElementById('names_dict').value,
+            alias: document.getElementById('alias').value,
+            conf_thres: parseFloat(document.getElementById('conf_thres').value),
+            confidence_display: document.getElementById('confidence_display').checked
+        };
+
+        try {
+            document.getElementById('status-msg').innerText = "向后防发送初始化请求部署命令中...";
+            const res = await fetch('/api/start_detection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                currentTaskId = data.task_id;
+                document.getElementById('task-id-disp').innerText = "成功唤起分配编号的任务: " + currentTaskId;
+                document.getElementById('start-btn').style.display = 'none';
+                document.getElementById('stop-btn').style.display = 'block';
+                document.getElementById('status-msg').innerText = "后台已就位，正在对接 WebSocket 开始呈现推流实时画面...";
+                
+                connectWebSocket(currentTaskId);
+            } else {
+                document.getElementById('status-msg').innerText = "系统发生拦截响应: " + data.detail;
+            }
+        } catch (err) {
+            document.getElementById('status-msg').innerText = "无法联机抵达后台网络: " + err.message;
+        }
+    }
+
+    async function stopDetection() {
+        if (!currentTaskId) return;
+
+        try {
+            document.getElementById('status-msg').innerText = "提交停止关闭的信令至系统总线...";
+            const res = await fetch(`/api/stop_detection/${currentTaskId}`, { method: 'POST' });
+            if (res.ok) {
+                document.getElementById('status-msg').innerText = "完全切断流媒体通道。";
+                resetUI();
+            } else {
+                const data = await res.json();
+                document.getElementById('status-msg').innerText = "关闭通道遭返回意外报错: " + data.detail;
+            }
+        } catch (err) {
+            document.getElementById('status-msg').innerText = "由于网络中断原因切断受挫: " + err.message;
+        }
+    }
+
+    function connectWebSocket(taskId) {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        ws = new WebSocket(`${protocol}//${window.location.host}/ws/stream/${taskId}`);
+
+        ws.onopen = () => {
+            document.getElementById('status-msg').innerText = "WebSocket 数据信道已被搭建。等候流推送展示中...";
+            document.getElementById('placeholder').style.display = 'none';
+            document.getElementById('video-feed').style.display = 'block';
+        };
+
+        ws.onmessage = (event) => {
+            const b64Image = event.data;
+            document.getElementById('video-feed').src = 'data:image/jpeg;base64,' + b64Image;
+        };
+
+        ws.onclose = () => {
+            document.getElementById('status-msg').innerText = "服务器端强行关闭或流生命周期彻底死亡，套接字阻断。";
+            resetUI();
+        };
+
+        ws.onerror = (err) => {
+            document.getElementById('status-msg').innerText = "前端网络模块发生错误，套接字遭非预期刷新影响阻断。";
+        };
+    }
+
+    function resetUI() {
+        if (ws) {
+            ws.close();
+            ws = null;
+        }
+        currentTaskId = null;
+        document.getElementById('task-id-disp').innerText = "";
+        document.getElementById('start-btn').style.display = 'block';
+        document.getElementById('stop-btn').style.display = 'none';
+        document.getElementById('placeholder').style.display = 'block';
+        document.getElementById('video-feed').style.display = 'none';
+    }
+</script>
+</body>
+</html>

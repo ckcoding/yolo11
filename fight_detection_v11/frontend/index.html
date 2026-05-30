@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO11智能视频流</title>
+    <style>
+        :root {
+            --primary: #0ea5e9;
+            --danger: #ef4444;
+            --bg: #0f172a;
+            --card-bg: #1e293b;
+            --border: #334155;
+            --text: #f8fafc;
+        }
+        body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 20px; margin: 0; }
+        h1 { color: #38bdf8; text-align: center; margin-bottom: 30px; font-weight: 800; letter-spacing: -1px; }
+        
+        .main-layout { display: grid; grid-template-columns: 350px 1fr; gap: 25px; max-width: 1800px; margin: 0 auto; height: calc(100vh - 100px); }
+        
+        /* 侧边栏配置区 */
+        .config-panel { background: var(--card-bg); padding: 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); height: fit-content; }
+        .config-panel h3 { margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; color: #bae6fd; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; font-size: 13px; color: #94a3b8; font-weight: 600; }
+        input[type="text"], input[type="number"], select { 
+            width: 100%; padding: 10px; border-radius: 6px; border: 1px solid #475569; 
+            background: #0f172a; color: var(--text); box-sizing: border-box; outline: none; transition: 0.2s;
+        }
+        input:focus { border-color: var(--primary); box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.2); }
+        .start-btn { 
+            background: var(--primary); color: white; border: none; padding: 14px; border-radius: 8px; 
+            cursor: pointer; font-weight: 800; width: 100%; font-size: 15px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
+        }
+        .start-btn:hover { background: #0284c7; transform: translateY(-1px); }
+        .start-btn:active { transform: translateY(0); }
+
+        /* 右侧视频矩阵区 */
+        .monitor-matrix { 
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(480px, 1fr)); 
+            gap: 24px; 
+            overflow-y: auto; 
+            padding: 10px;
+        }
+
+        /* 视频卡片样式优化 */
+        .video-card { 
+            background: var(--card-bg); 
+            border-radius: 12px; 
+            border: 1px solid var(--border); 
+            display: flex; 
+            flex-direction: column; 
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.4);
+            min-height: 350px; /* 强制最小高度，防止收缩 */
+        }
+        .video-card:hover { 
+            border-color: var(--primary); 
+            transform: translateY(-4px); 
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5);
+        }
+        .video-header { 
+            padding: 10px 15px; 
+            background: rgba(0,0,0,0.6); 
+            font-family: 'JetBrains Mono', monospace; 
+            font-size: 12px; 
+            display: flex; 
+            justify-content: space-between; 
+            color: #7dd3fc;
+            border-bottom: 1px solid var(--border);
+        }
+        .video-wrapper { 
+            flex-grow: 1; /* 占据剩余空间 */
+            width: 100%; 
+            background: #000; 
+            display: flex; 
+            justify-content: center; 
+            align-items: center; 
+            overflow: hidden;
+        }
+        .video-wrapper img { width: 100%; height: 100%; object-fit: contain; }
+        
+        /* 底部控制栏 - 确保可见 */
+        .video-footer { 
+            padding: 15px; 
+            background: #1e293b; 
+            border-top: 1px solid var(--border);
+        }
+        .stop-btn { 
+            background: var(--danger); /* 改为实色红 */
+            color: white;
+            border: none;
+            padding: 12px; 
+            border-radius: 8px; 
+            cursor: pointer; 
+            width: 100%; 
+            font-weight: 800; 
+            font-size: 14px;
+            transition: 0.2s;
+            box-shadow: 0 4px 6px -1px rgba(239, 68, 68, 0.3);
+        }
+        .stop-btn:hover { 
+            background: #dc2626; 
+            transform: scale(1.02);
+            box-shadow: 0 6px 8px -1px rgba(239, 68, 68, 0.4);
+        }
+
+        .empty-hint { 
+            grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; 
+            justify-content: center; color: #475569; padding-top: 100px;
+        }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
+
+        /* 左上角计数角标 */
+        .stream-counter {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: rgba(14, 165, 233, 0.2);
+            backdrop-filter: blur(8px);
+            border: 1px solid var(--primary);
+            padding: 10px 20px;
+            border-radius: 50px;
+            z-index: 9999;
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            pointer-events: none;
+        }
+        .counter-dot {
+            width: 8px;
+            height: 8px;
+            background: #22c55e;
+            border-radius: 50%;
+            box-shadow: 0 0 8px #22c55e;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.4; }
+            100% { opacity: 1; }
+        }
+        #active-count { font-weight: 800; color: #bae6fd; font-size: 18px; }
+
+        /* 人性化复选框样式 */
+        .checkbox-group { 
+            display: flex; flex-wrap: wrap; gap: 8px; margin-top: 5px; 
+            max-height: 200px; overflow-y: auto; padding: 10px;
+            background: rgba(0,0,0,0.2); border-radius: 6px; border: 1px solid var(--border);
+        }
+        .check-item { 
+            display: flex; align-items: center; gap: 5px; background: #334155; 
+            padding: 5px 12px; border-radius: 20px; font-size: 12px; cursor: pointer;
+            transition: 0.2s; border: 1px solid transparent; user-select: none;
+        }
+        .check-item:hover { background: #475569; }
+        .check-item input { display: none; }
+        .check-item.active { background: var(--primary); border-color: #bae6fd; color: white; }
+        
+        .class-group-title { font-size: 11px; color: #38bdf8; margin: 10px 0 5px 0; width: 100%; border-left: 3px solid var(--primary); padding-left: 8px; }
+    </style>
+</head>
+<body>
+
+<!-- 新增计数器 -->
+<div class="stream-counter">
+    <div class="counter-dot"></div>
+    <span style="font-size: 14px; color: #94a3b8;">活动检测路数:</span>
+    <span id="active-count">0</span>
+</div>
+
+<h1>多路视频流检测终端</h1>
+
+<div class="main-layout">
+    <!-- 侧边栏部署区 -->
+    <div class="config-panel">
+        <h3>🚀 任务部署引擎</h3>
+        <div class="form-group">
+            <label>流地址 (RTMP/RTSP/USB)</label>
+            <input type="text" id="stream_url" value="rtmp://192.168.3.231:1935/live/1">
+        </div>
+
+        <div class="form-group">
+            <label>算力引擎 (选定参与计算的模型)</label>
+            <div id="model-checkboxes" class="checkbox-group">
+                <!-- 由 JS 动态填充 -->
+                <p style="font-size: 12px; color: #475569;">探测可用物理模型中...</p>
+            </div>
+        </div>
+
+        <div id="class-selection-area" class="form-group" style="display: none;">
+            <label>检测类别 (勾选需要识别的目标)</label>
+            <div id="class-checkboxes" class="checkbox-group">
+                <!-- 根据模型勾选情况动态生成 -->
+            </div>
+        </div>
+
+        <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+                <label>置信度阈值 (0-1)</label>
+                <input type="number" step="0.05" id="conf_thres" value="0.5">
+            </div>
+            <div>
+                <label>检测频率 (FPS)</label>
+                <input type="number" id="inference_fps" value="10" min="1" max="60">
+            </div>
+        </div>
+
+        <div class="form-group" style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+                <input type="checkbox" id="confidence_display" style="width: auto;">
+                <label style="margin: 0">显示类别标签与置信度</label>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px; border: 1px solid #1e3a8a; background: rgba(30, 58, 138, 0.3); padding: 8px; border-radius: 6px;">
+                <input type="checkbox" id="fight_detection" style="width: auto; accent-color: var(--danger);">
+                <label style="margin: 0; color: #f87171; font-weight: 800;">🔥 开启无人机打架识别 (Pose)</label>
+            </div>
+        </div>
+        <div class="form-group">
+            <label>客户端别前缀 (Alias)</label>
+            <input type="text" id="alias" value="zhangsan">
+        </div>
+        <button class="start-btn" onclick="startDetection()">启动新检测任务</button>
+        <p style="font-size: 12px; color: #64748b; margin-top: 15px;">* 勾选多个引擎可实现同一画面的人车融合识别</p>
+    </div>
+
+    <!-- 右侧滚动显示区 -->
+    <div class="monitor-matrix" id="monitor-matrix">
+        <div class="empty-hint" id="empty-hint">
+            <svg style="width: 80px; opacity: 0.2;" fill="currentColor" viewBox="0 0 24 24"><path d="M21 16.5C21 16.88 20.79 17.21 20.47 17.38L12.57 21.82C12.41 21.94 12.21 22 12 22C11.79 22 11.59 21.94 11.43 21.82L3.53 17.38C3.21 17.21 3 16.88 3 16.5V7.5C3 7.12 3.21 6.79 3.53 6.62L11.43 2.18C11.59 2.06 11.79 2 12 2C12.21 2 12.41 2.06 12.57 2.18L20.47 6.62C20.79 6.79 21 7.12 21 7.5V16.5Z"/></svg>
+            <p>目前阵列为空，请从左侧开始部署监控波段</p>
+        </div>
+    </div>
+</div>
+
+<script>
+    const activeTasks = new Map(); // 存储 TaskId -> { ws, element }
+    const modelClassCache = new Map(); // 缓存模型对应的类别，避免重复请求
+
+    function updateCounter() {
+        document.getElementById('active-count').innerText = activeTasks.size;
+    }
+
+    // 初始化：获取可用模型并渲染复选框 (统一改为 POST)
+    window.addEventListener('DOMContentLoaded', async () => {
+        try {
+            const response = await fetch('/api/models', { method: 'POST' });
+            const resData = await response.json();
+            if (resData.code !== 200) return;
+
+            const container = document.getElementById('model-checkboxes');
+            container.innerHTML = '';
+            
+            resData.data.models.forEach(model => {
+                const label = document.createElement('label');
+                label.className = 'check-item';
+                label.innerHTML = `<input type="checkbox" value="${model}" onchange="onModelChange(this)"> ${model}`;
+                container.appendChild(label);
+            });
+        } catch (err) { console.error("API 离线"); }
+    });
+
+    // 模型勾选状态改变时的响应
+    async function onModelChange(checkbox) {
+        const label = checkbox.parentElement;
+        if (checkbox.checked) {
+            label.classList.add('active');
+            await fetchAndRenderClasses();
+        } else {
+            label.classList.remove('active');
+            await fetchAndRenderClasses();
+        }
+    }
+
+    // 动态拉取并渲染类别复选框 (统一改为 POST)
+    async function fetchAndRenderClasses() {
+        const checkedModels = Array.from(document.querySelectorAll('#model-checkboxes input:checked')).map(i => i.value);
+        const container = document.getElementById('class-checkboxes');
+        const area = document.getElementById('class-selection-area');
+
+        if (checkedModels.length === 0) {
+            area.style.display = 'none';
+            container.innerHTML = '';
+            return;
+        }
+
+        area.style.display = 'block';
+        container.innerHTML = ''; // 重新刷一遍，保持有序
+
+        for (const model of checkedModels) {
+            if (!modelClassCache.has(model)) {
+                try {
+                    const res = await fetch(`/api/model_classes`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model_name: model })
+                    });
+                    const resData = await res.json();
+                    if (resData.code === 200) {
+                        modelClassCache.set(model, resData.data.classes);
+                    }
+                } catch (e) { continue; }
+            }
+
+            // 渲染该模型的类别组
+            const classes = modelClassCache.get(model);
+            if (!classes) continue;
+            
+            const title = document.createElement('div');
+            title.className = 'class-group-title';
+            title.innerText = `模型 [${model}] 包含的类别：`;
+            container.appendChild(title);
+
+            classes.forEach(cls => {
+                const label = document.createElement('label');
+                label.className = 'check-item active'; // 默认全选，更人性化
+                label.innerHTML = `<input type="checkbox" value="${cls}" checked onchange="this.parentElement.classList.toggle('active')"> ${cls}`;
+                container.appendChild(label);
+            });
+        }
+    }
+
+    async function startDetection() {
+        // 收集选中的模型
+        const selectedModels = Array.from(document.querySelectorAll('#model-checkboxes input:checked')).map(i => i.value);
+        if (selectedModels.length === 0) {
+            alert("请至少勾选一个算力引擎模型！");
+            return;
+        }
+
+        // 收集选中的类别（按逗号合并成后端需要的格式）
+        const selectedClasses = Array.from(document.querySelectorAll('#class-checkboxes input:checked')).map(i => i.value);
+        if (selectedClasses.length === 0) {
+            alert("请至少勾选一个需要识别的类别！");
+            return;
+        }
+
+        const payload = {
+            stream_url: document.getElementById('stream_url').value,
+            model_name: selectedModels.join(','), 
+            names_dict: selectedClasses.join(','), 
+            alias: document.getElementById('alias').value,
+            conf_thres: parseFloat(document.getElementById('conf_thres').value),
+            inference_fps: parseInt(document.getElementById('inference_fps').value),
+            confidence_display: document.getElementById('confidence_display').checked,
+            fight_detection: document.getElementById('fight_detection').checked
+        };
+
+        try {
+            const res = await fetch('/api/start_detection', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const resData = await res.json();
+            
+            if (resData.code === 200) {
+                createVideoCard(resData.data.task_id, payload);
+            } else {
+                alert("启动失败: " + resData.message);
+            }
+        } catch (err) { alert("网络错误: " + err.message); }
+    }
+
+    function createVideoCard(taskId, info) {
+        const matrix = document.getElementById('monitor-matrix');
+        const hint = document.getElementById('empty-hint');
+        if (hint) hint.style.display = 'none';
+
+        // 创建卡片 DOM
+        const card = document.createElement('div');
+        card.className = 'video-card';
+        card.id = `card-${taskId}`;
+        card.innerHTML = `
+            <div class="video-header">
+                <span>Task: ${taskId.substring(0,8)}...</span>
+                <span style="color: #64748b">${info.alias}</span>
+            </div>
+            <div class="video-wrapper">
+                <img id="view-${taskId}" src="" alt="Connecting...">
+            </div>
+            <div class="video-footer">
+                <button class="stop-btn" onclick="stopTask('${taskId}')">终止侦测并断开数据</button>
+            </div>
+        `;
+        matrix.appendChild(card);
+
+        // 建立该路流的专属 WebSocket
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${protocol}//${window.location.host}/ws/stream/${taskId}`);
+        const view = document.getElementById(`view-${taskId}`);
+
+        ws.onmessage = (event) => { view.src = 'data:image/jpeg;base64,' + event.data; };
+        ws.onclose = () => { removeCard(taskId); };
+
+        activeTasks.set(taskId, { ws, element: card });
+        updateCounter();
+    }
+
+    async function stopTask(taskId) {
+        try {
+            const res = await fetch(`/api/stop_detection`, { 
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task_id: taskId }) 
+            });
+            const resData = await res.json();
+            if (resData.code === 200) { removeCard(taskId); }
+        } catch (err) { console.error("Stop error", err); }
+    }
+
+    function removeCard(taskId) {
+        const task = activeTasks.get(taskId);
+        if (task) {
+            if (task.ws) task.ws.close();
+            task.element.remove();
+            activeTasks.delete(taskId);
+            updateCounter();
+        }
+        const matrix = document.getElementById('monitor-matrix');
+        if (matrix.children.length === 0 || (matrix.children.length === 1 && matrix.children[0].id === 'empty-hint')) {
+            document.getElementById('empty-hint').style.display = 'flex';
+        }
+    }
+</script>
+</body>
+</html>

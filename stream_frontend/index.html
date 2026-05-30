@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YOLO11 机器视觉演示台</title>
+  <script src="./config.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/vue@2.7.14/dist/vue.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  <style>
+    :root {
+      --ink: #17201b;
+      --muted: #65756d;
+      --paper: #f6f1e8;
+      --panel: rgba(255, 252, 244, 0.82);
+      --panel-strong: #fffaf0;
+      --line: rgba(36, 55, 45, 0.16);
+      --green: #1d7d55;
+      --green-deep: #0f5339;
+      --lime: #b6d95b;
+      --orange: #ef8f35;
+      --red: #d84d36;
+      --blue: #246b99;
+      --shadow: 0 24px 70px rgba(31, 48, 40, 0.18);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      background:
+        radial-gradient(circle at 10% 15%, rgba(182, 217, 91, 0.38), transparent 32%),
+        radial-gradient(circle at 86% 8%, rgba(239, 143, 53, 0.24), transparent 28%),
+        linear-gradient(135deg, #fbf3df 0%, #eff3df 46%, #dfeee8 100%);
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(23, 32, 27, 0.035) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(23, 32, 27, 0.035) 1px, transparent 1px);
+      background-size: 28px 28px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.8), transparent 82%);
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .shell {
+      width: min(1520px, calc(100vw - 36px));
+      margin: 0 auto;
+      padding: 28px 0;
+    }
+
+    .hero {
+      min-height: 190px;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 420px;
+      gap: 22px;
+      align-items: stretch;
+      margin-bottom: 22px;
+    }
+
+    .hero-main,
+    .status-card,
+    .control,
+    .stage,
+    .metrics,
+    .events {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
+    }
+
+    .hero-main {
+      position: relative;
+      overflow: hidden;
+      border-radius: 34px;
+      padding: 30px;
+    }
+
+    .hero-main::after {
+      content: "YOLO11";
+      position: absolute;
+      right: -18px;
+      bottom: -38px;
+      color: rgba(15, 83, 57, 0.07);
+      font-size: 138px;
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: -0.08em;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(29, 125, 85, 0.11);
+      color: var(--green-deep);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+    }
+
+    .pulse-dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 0 rgba(29, 125, 85, 0.48);
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(29, 125, 85, 0.45);
+      }
+
+      70% {
+        box-shadow: 0 0 0 13px rgba(29, 125, 85, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(29, 125, 85, 0);
+      }
+    }
+
+    h1 {
+      position: relative;
+      z-index: 1;
+      margin: 20px 0 12px;
+      font-size: clamp(38px, 5.6vw, 78px);
+      line-height: 0.96;
+      letter-spacing: -0.07em;
+    }
+
+    .hero-copy {
+      position: relative;
+      z-index: 1;
+      max-width: 760px;
+      color: var(--muted);
+      font-size: 16px;
+      line-height: 1.8;
+    }
+
+    .hero-actions {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .btn {
+      border: 0;
+      border-radius: 18px;
+      padding: 13px 18px;
+      color: #fff;
+      background: var(--green-deep);
+      cursor: pointer;
+      font-weight: 800;
+      box-shadow: 0 14px 30px rgba(15, 83, 57, 0.22);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, opacity 0.18s ease;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 18px 38px rgba(15, 83, 57, 0.26);
+    }
+
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.55;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .btn.secondary {
+      color: var(--green-deep);
+      background: rgba(15, 83, 57, 0.08);
+      box-shadow: none;
+    }
+
+    .btn.danger {
+      background: var(--red);
+      box-shadow: 0 14px 30px rgba(216, 77, 54, 0.2);
+    }
+
+    .status-card {
+      border-radius: 30px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 18px;
+    }
+
+    .status-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--muted);
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .status-pill {
+      padding: 7px 11px;
+      border-radius: 999px;
+      color: #fff;
+      background: var(--red);
+      font-size: 12px;
+      letter-spacing: 0;
+      text-transform: none;
+    }
+
+    .status-pill.ok {
+      background: var(--green);
+    }
+
+    .status-big {
+      font-size: 42px;
+      line-height: 1;
+      font-weight: 900;
+      letter-spacing: -0.05em;
+    }
+
+    .endpoint {
+      padding: 13px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.5);
+      border: 1px solid rgba(36, 55, 45, 0.08);
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+      word-break: break-all;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 390px minmax(0, 1fr) 340px;
+      gap: 22px;
+      align-items: start;
+    }
+
+    .control,
+    .stage,
+    .metrics,
+    .events {
+      border-radius: 28px;
+    }
+
+    .control {
+      padding: 22px;
+      position: sticky;
+      top: 18px;
+    }
+
+    .panel-title {
+      margin: 0 0 16px;
+      font-size: 18px;
+      letter-spacing: -0.03em;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+      margin-bottom: 16px;
+    }
+
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .input {
+      width: 100%;
+      padding: 14px 15px;
+      border: 1px solid rgba(36, 55, 45, 0.15);
+      border-radius: 16px;
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.66);
+      outline: none;
+      transition: border 0.18s ease, box-shadow 0.18s ease;
+    }
+
+    .input:focus {
+      border-color: rgba(29, 125, 85, 0.55);
+      box-shadow: 0 0 0 4px rgba(29, 125, 85, 0.08);
+    }
+
+    .target-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .target-card {
+      display: grid;
+      grid-template-columns: 42px minmax(0, 1fr);
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid rgba(36, 55, 45, 0.1);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.46);
+      cursor: pointer;
+      transition: transform 0.18s ease, border 0.18s ease, background 0.18s ease;
+    }
+
+    .target-card:hover {
+      transform: translateY(-1px);
+      border-color: rgba(29, 125, 85, 0.24);
+    }
+
+    .target-card.active {
+      border-color: rgba(29, 125, 85, 0.5);
+      background: rgba(29, 125, 85, 0.1);
+    }
+
+    .target-icon {
+      height: 42px;
+      border-radius: 15px;
+      display: grid;
+      place-items: center;
+      color: var(--green-deep);
+      background: var(--lime);
+      font-weight: 900;
+    }
+
+    .target-name {
+      font-weight: 900;
+      margin-bottom: 4px;
+    }
+
+    .target-id {
+      color: var(--muted);
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    .control-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .stage {
+      overflow: hidden;
+      background: #101610;
+      min-height: 660px;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .stage-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 20px;
+      color: #e9f1df;
+      background:
+        linear-gradient(90deg, rgba(182, 217, 91, 0.14), transparent),
+        #101610;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .stage-title {
+      min-width: 0;
+    }
+
+    .stage-title h2 {
+      margin: 0;
+      font-size: 19px;
+    }
+
+    .stage-title div {
+      margin-top: 5px;
+      color: rgba(233, 241, 223, 0.62);
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    .live-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .viewer {
+      position: relative;
+      flex: 1;
+      min-height: 560px;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(182, 217, 91, 0.12), transparent 40%),
+        linear-gradient(135deg, #101610, #080b08);
+    }
+
+    .viewer img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .empty-viewer {
+      text-align: center;
+      color: rgba(233, 241, 223, 0.66);
+      padding: 24px;
+    }
+
+    .empty-orb {
+      width: 132px;
+      height: 132px;
+      margin: 0 auto 18px;
+      border-radius: 50%;
+      background:
+        radial-gradient(circle at 35% 28%, rgba(255, 255, 255, 0.78), transparent 18%),
+        radial-gradient(circle, var(--lime), var(--green-deep));
+      box-shadow: 0 0 80px rgba(182, 217, 91, 0.22);
+      animation: float 4s ease-in-out infinite;
+    }
+
+    @keyframes float {
+      0%,
+      100% {
+        transform: translateY(0);
+      }
+
+      50% {
+        transform: translateY(-10px);
+      }
+    }
+
+    .empty-viewer h3 {
+      margin: 0 0 8px;
+      color: #fff;
+      font-size: 24px;
+    }
+
+    .side {
+      display: grid;
+      gap: 22px;
+    }
+
+    .metrics,
+    .events {
+      padding: 20px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      padding: 14px;
+      border-radius: 17px;
+      background: rgba(255, 255, 255, 0.52);
+      border: 1px solid rgba(36, 55, 45, 0.09);
+    }
+
+    .metric .k {
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 7px;
+      font-weight: 800;
+    }
+
+    .metric .v {
+      font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      word-break: break-all;
+    }
+
+    .task-line {
+      margin-top: 14px;
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(15, 83, 57, 0.08);
+      color: var(--green-deep);
+      font-size: 12px;
+      line-height: 1.6;
+      word-break: break-all;
+    }
+
+    .event-list {
+      display: grid;
+      gap: 12px;
+      max-height: 430px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .event {
+      border-radius: 18px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.56);
+      border: 1px solid rgba(36, 55, 45, 0.1);
+    }
+
+    .event img {
+      width: 100%;
+      max-height: 180px;
+      object-fit: cover;
+      display: block;
+      background: #111;
+    }
+
+    .event-body {
+      padding: 11px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .event-labels {
+      margin-top: 7px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 26px;
+      padding: 5px 9px;
+      border-radius: 999px;
+      color: var(--green-deep);
+      background: rgba(182, 217, 91, 0.28);
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      z-index: 10;
+      transform: translateX(-50%);
+      min-width: min(480px, calc(100vw - 36px));
+      padding: 14px 16px;
+      border-radius: 18px;
+      color: #fff;
+      background: rgba(15, 83, 57, 0.94);
+      box-shadow: 0 18px 44px rgba(15, 83, 57, 0.28);
+      text-align: center;
+      animation: toast-in 0.2s ease;
+    }
+
+    .toast.error {
+      background: rgba(216, 77, 54, 0.96);
+    }
+
+    @keyframes toast-in {
+      from {
+        opacity: 0;
+        transform: translate(-50%, 12px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+    }
+
+    @media (max-width: 1180px) {
+      .hero,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+
+      .control {
+        position: static;
+      }
+
+      .stage {
+        min-height: 520px;
+      }
+
+      .viewer {
+        min-height: 430px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .shell {
+        width: min(100vw - 20px, 1520px);
+        padding: 10px 0 18px;
+      }
+
+      .hero-main,
+      .status-card,
+      .control,
+      .metrics,
+      .events {
+        border-radius: 22px;
+        padding: 16px;
+      }
+
+      .stage {
+        border-radius: 22px;
+      }
+
+      .stage-head {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .control-actions,
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app" class="shell">
+    <section class="hero">
+      <div class="hero-main">
+        <div class="eyebrow"><span class="pulse-dot"></span>REALTIME VISION CONSOLE</div>
+        <h1>机器视觉<br>演示控制台</h1>
+        <p class="hero-copy">
+          面向本机 YOLO11 检测服务的轻量演示界面。默认接入
+          <strong>rtmp://192.168.6.5:1935/live/car</strong>，使用 WebSocket 返回检测后的实时预览帧。
+        </p>
+        <div class="hero-actions">
+          <button class="btn" :disabled="loading || !!activeTask.task_id" @click="startDetection">启动检测</button>
+          <button class="btn danger" :disabled="!activeTask.task_id" @click="stopDetection">停止任务</button>
+          <button class="btn secondary" @click="refreshService">刷新服务状态</button>
+        </div>
+      </div>
+
+      <aside class="status-card">
+        <div class="status-title">
+          SERVICE
+          <span class="status-pill" :class="{ ok: serviceOnline }">{{ serviceOnline ? '在线' : '离线' }}</span>
+        </div>
+        <div>
+          <div class="status-big">{{ serviceOnline ? modelOptions.length : 0 }} Models</div>
+          <p class="hero-copy" style="margin: 12px 0 0;">{{ statusText }}</p>
+        </div>
+        <div class="endpoint">
+          <div><strong>API</strong> {{ apiBase }}</div>
+          <div><strong>WS</strong> {{ wsBase }}</div>
+          <div><strong>任务</strong> {{ activeTask.task_id || '未启动' }}</div>
+        </div>
+      </aside>
+    </section>
+
+    <main class="layout">
+      <section class="control">
+        <h2 class="panel-title">检测配置</h2>
+        <div class="field">
+          <div class="label">视频源</div>
+          <input class="input" v-model.trim="form.stream_url" placeholder="RTMP / RTSP / MP4 / 本地路径">
+        </div>
+        <div class="field">
+          <div class="label">任务别名</div>
+          <input class="input" v-model.trim="form.alias" placeholder="car">
+        </div>
+        <div class="field">
+          <div class="label">置信度 {{ Number(form.conf_thres).toFixed(2) }}</div>
+          <input class="input" type="range" min="0.05" max="0.9" step="0.05" v-model.number="form.conf_thres">
+        </div>
+        <div class="field">
+          <div class="label">检测目标</div>
+          <div class="target-grid">
+            <div
+              v-for="item in modelOptions"
+              :key="item.id"
+              class="target-card"
+              :class="{ active: selectedLabels.includes(item.id) }"
+              @click="toggleLabel(item.id)"
+            >
+              <div class="target-icon">{{ targetInitial(item.name) }}</div>
+              <div>
+                <div class="target-name">{{ item.name }}</div>
+                <div class="target-id">{{ item.id }}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="control-actions">
+          <button class="btn" :disabled="loading || !!activeTask.task_id" @click="startDetection">启动</button>
+          <button class="btn danger" :disabled="!activeTask.task_id" @click="stopDetection">停止</button>
+        </div>
+      </section>
+
+      <section class="stage">
+        <div class="stage-head">
+          <div class="stage-title">
+            <h2>{{ activeTask.status === 'processing' ? '检测画面' : '实时预览待命' }}</h2>
+            <div>{{ activeTask.source || form.stream_url }}</div>
+          </div>
+          <div class="live-badge"><span class="pulse-dot"></span>{{ activeTask.status || 'idle' }}</div>
+        </div>
+        <div class="viewer">
+          <img v-if="previewUrl" :src="previewUrl" alt="检测预览">
+          <div v-else class="empty-viewer">
+            <div class="empty-orb"></div>
+            <h3>等待检测流</h3>
+            <div>启动任务后，这里会显示带检测框的视频帧。</div>
+          </div>
+        </div>
+      </section>
+
+      <aside class="side">
+        <section class="metrics">
+          <h2 class="panel-title">运行指标</h2>
+          <div class="metric-grid">
+            <div class="metric">
+              <div class="k">当前 FPS</div>
+              <div class="v">{{ metric('current_fps') }}</div>
+            </div>
+            <div class="metric">
+              <div class="k">输出 FPS</div>
+              <div class="v">{{ metric('output_fps') }}</div>
+            </div>
+            <div class="metric">
+              <div class="k">处理帧数</div>
+              <div class="v">{{ metric('frame_count') }}</div>
+            </div>
+            <div class="metric">
+              <div class="k">模型耗时</div>
+              <div class="v">{{ metric('model_exec_ms') }}ms</div>
+            </div>
+          </div>
+          <div class="task-line">
+            <div><strong>GPU</strong> {{ activeTask.device || '-' }}</div>
+            <div><strong>目标</strong> {{ selectedLabelNames }}</div>
+            <div><strong>WS</strong> {{ wsConnected ? '已连接' : '未连接' }}</div>
+          </div>
+        </section>
+
+        <section class="events">
+          <h2 class="panel-title">事件抓拍</h2>
+          <div v-if="!snapshots.length" class="endpoint">暂无抓拍事件。检测到目标后会在这里显示快照。</div>
+          <div v-else class="event-list">
+            <div class="event" v-for="event in snapshots" :key="event.id">
+              <img v-if="event.image_url" :src="event.image_url" alt="抓拍">
+              <div class="event-body">
+                <div>{{ event.time }}</div>
+                <div class="event-labels">
+                  <span class="chip" v-for="label in event.labels" :key="label">{{ displayName(label) }}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </aside>
+    </main>
+
+    <div v-if="toast.message" class="toast" :class="{ error: toast.type === 'error' }">{{ toast.message }}</div>
+  </div>
+
+  <script>
+    const cfg = window.__AI_CONFIG__ || {};
+    const defaultApiBase = cfg.apiBase || 'http://127.0.0.1:18008';
+    const defaultWsBase = cfg.wsBase || 'ws://127.0.0.1:18008';
+
+    new Vue({
+      el: '#app',
+      data() {
+        return {
+          apiBase: defaultApiBase,
+          wsBase: defaultWsBase,
+          serviceOnline: false,
+          statusText: '正在连接检测服务...',
+          loading: false,
+          form: {
+            stream_url: 'rtmp://192.168.6.5:1935/live/car',
+            alias: 'car',
+            conf_thres: 0.25
+          },
+          modelOptions: [
+            { id: 'drone_people', name: '人员检测', model_id: 'drone_person' },
+            { id: 'drone_car', name: '车辆检测', model_id: 'drone_car' }
+          ],
+          selectedLabels: ['drone_people', 'drone_car'],
+          activeTask: {},
+          previewUrl: '',
+          wsObj: null,
+          wsConnected: false,
+          pollTimer: null,
+          snapshots: [],
+          eventId: 0,
+          toast: { message: '', type: 'ok' }
+        };
+      },
+      computed: {
+        selectedLabelNames() {
+          return this.selectedLabels.map(this.displayName).join(' / ') || '未选择';
+        }
+      },
+      methods: {
+        showToast(message, type = 'ok') {
+          this.toast = { message, type };
+          window.clearTimeout(this.toastTimer);
+          this.toastTimer = window.setTimeout(() => {
+            this.toast = { message: '', type: 'ok' };
+          }, 2600);
+        },
+        targetInitial(name) {
+          return String(name || '?').slice(0, 1);
+        },
+        normalizeName(item) {
+          if (item.id === 'drone_people') return '人员检测';
+          if (item.id === 'drone_car') return '车辆检测';
+          if (item.id === 'drone_fire') return '火灾检测';
+          if (item.id === 'drone_smokes') return '烟雾检测';
+          if (item.id === 'drone_zdjy') return '占道经营';
+          return item.name || item.id;
+        },
+        displayName(id) {
+          const item = this.modelOptions.find(model => model.id === id);
+          return item ? item.name : id;
+        },
+        toggleLabel(id) {
+          if (this.activeTask.task_id) {
+            this.showToast('当前任务运行中，请先停止再调整目标', 'error');
+            return;
+          }
+          if (this.selectedLabels.includes(id)) {
+            this.selectedLabels = this.selectedLabels.filter(item => item !== id);
+          } else {
+            this.selectedLabels = this.selectedLabels.concat(id);
+          }
+        },
+        buildNamesDict() {
+          return this.selectedLabels.map(id => `${id}:${this.displayName(id)}`).join(',');
+        },
+        metric(key) {
+          const value = this.activeTask[key];
+          if (value === undefined || value === null || value === '') return '-';
+          if (typeof value === 'number') return Number.isInteger(value) ? value : value.toFixed(1);
+          return value;
+        },
+        rewriteUrl(url) {
+          if (!url) return '';
+          return String(url)
+            .replace('http://0.0.0.0:18008', this.apiBase)
+            .replace('http://127.0.0.1:18008', this.apiBase);
+        },
+        async refreshService() {
+          try {
+            const res = await axios.get(`${this.apiBase}/models`, { timeout: 5000 });
+            const labels = res.data && res.data.data && Array.isArray(res.data.data.labels)
+              ? res.data.data.labels
+              : [];
+            if (labels.length) {
+              this.modelOptions = labels.map(item => ({
+                id: item.id,
+                name: this.normalizeName(item),
+                model_id: item.model_id || ''
+              }));
+              const valid = new Set(this.modelOptions.map(item => item.id));
+              this.selectedLabels = this.selectedLabels.filter(id => valid.has(id));
+              if (!this.selectedLabels.length) {
+                this.selectedLabels = this.modelOptions
+                  .filter(item => ['drone_people', 'drone_car'].includes(item.id))
+                  .map(item => item.id);
+              }
+            }
+            this.serviceOnline = true;
+            this.statusText = '检测服务正常，模型已加载。';
+          } catch (error) {
+            this.serviceOnline = false;
+            this.statusText = '检测服务未响应，请确认 18008 已启动。';
+          }
+        },
+        async startDetection() {
+          if (!this.form.stream_url) return this.showToast('请填写视频源', 'error');
+          if (!this.selectedLabels.length) return this.showToast('请至少选择一个检测目标', 'error');
+          this.loading = true;
+          try {
+            const res = await axios.post(`${this.apiBase}/detect-stream`, {
+              stream_url: this.form.stream_url,
+              alias: this.form.alias || 'demo',
+              mode: 'websocket',
+              names_dict: this.buildNamesDict(),
+              conf_thres: Number(this.form.conf_thres || 0.25)
+            });
+            if (!res.data || res.data.code !== 200) {
+              throw new Error((res.data && res.data.message) || '启动失败');
+            }
+            this.activeTask = Object.assign({}, res.data.data || {});
+            this.activeTask.source = this.form.stream_url;
+            this.connectPreview();
+            this.startPolling();
+            this.showToast('检测任务已启动');
+          } catch (error) {
+            const detail = error.response && error.response.data && (error.response.data.detail || error.response.data.message);
+            this.showToast(detail || error.message || '启动失败', 'error');
+          } finally {
+            this.loading = false;
+          }
+        },
+        async stopDetection() {
+          if (!this.activeTask.task_id) return;
+          const taskId = this.activeTask.task_id;
+          try {
+            await axios.post(`${this.apiBase}/ai/stop`, { task_id: taskId });
+          } catch (error) {}
+          this.closePreview();
+          this.stopPolling();
+          this.activeTask = {};
+          this.showToast('检测任务已停止');
+        },
+        connectPreview() {
+          this.closePreview();
+          const taskId = this.activeTask.task_id;
+          if (!taskId) return;
+          const ws = new WebSocket(this.activeTask.ws_url || `${this.wsBase}/ws/${taskId}`);
+          ws.binaryType = 'blob';
+          this.wsObj = ws;
+          ws.onopen = () => {
+            this.wsConnected = true;
+            this.heartbeatTimer = window.setInterval(() => {
+              if (this.wsObj && this.wsObj.readyState === WebSocket.OPEN) {
+                this.wsObj.send('ping');
+              }
+            }, 5000);
+          };
+          ws.onmessage = event => {
+            if (event.data instanceof Blob) {
+              if (this.previewUrl) URL.revokeObjectURL(this.previewUrl);
+              this.previewUrl = URL.createObjectURL(event.data);
+              return;
+            }
+            try {
+              const data = JSON.parse(event.data);
+              const imageUrl = this.rewriteUrl(data.snapshot_url || data.image_url || '');
+              this.snapshots.unshift({
+                id: ++this.eventId,
+                time: new Date((data.time || Date.now() / 1000) * 1000).toLocaleTimeString('zh-CN', { hour12: false }),
+                labels: data.labels || [],
+                image_url: imageUrl
+              });
+              this.snapshots = this.snapshots.slice(0, 8);
+            } catch (error) {}
+          };
+          ws.onclose = () => {
+            this.wsConnected = false;
+            window.clearInterval(this.heartbeatTimer);
+          };
+          ws.onerror = () => {
+            this.wsConnected = false;
+          };
+        },
+        closePreview() {
+          window.clearInterval(this.heartbeatTimer);
+          if (this.wsObj) {
+            try {
+              this.wsObj.close();
+            } catch (error) {}
+            this.wsObj = null;
+          }
+          this.wsConnected = false;
+          if (this.previewUrl) {
+            URL.revokeObjectURL(this.previewUrl);
+            this.previewUrl = '';
+          }
+        },
+        startPolling() {
+          this.stopPolling();
+          this.pollTimer = window.setInterval(this.refreshTask, 2000);
+          this.refreshTask();
+        },
+        stopPolling() {
+          if (this.pollTimer) {
+            window.clearInterval(this.pollTimer);
+            this.pollTimer = null;
+          }
+        },
+        async refreshTask() {
+          if (!this.activeTask.task_id) return;
+          try {
+            const res = await axios.post(`${this.apiBase}/task-status`, { task_id: this.activeTask.task_id });
+            if (res.data && res.data.code === 200) {
+              this.activeTask = Object.assign({}, this.activeTask, res.data.data || {});
+            } else if (res.data && res.data.code === 404) {
+              this.closePreview();
+              this.stopPolling();
+              this.activeTask = {};
+            }
+          } catch (error) {}
+        }
+      },
+      created() {
+        this.refreshService();
+      },
+      beforeDestroy() {
+        this.closePreview();
+        this.stopPolling();
+      }
+    });
+  </script>
+</body>
+
+</html>

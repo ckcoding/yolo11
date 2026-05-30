@@ -1,0 +1,59 @@
+services:
+  yolo-server:
+    build: .
+    container_name: yolo_stream_service
+    restart: always
+    init: true
+    network_mode: host
+    shm_size: '4g'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18008/models"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - .:/workspace
+      # 以后所有模型文件都放进主机上的 ../models 文件夹即可，无需在此处反复添加路径
+      - ../models:/workspace/models:ro
+      - ../fonts:/workspace/fonts:ro
+      - ../:/workspace/media:ro
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - NVIDIA_DISABLE_REQUIRE=1
+      # 模型配置及基础参数，全权交由同目录下的 config.yml 管理
+      # - MODELS=/workspace/models/drone_person.pt
+    ulimits:
+      core: 0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]
+
+  # ZLMediaKit 流媒体服务器也使用 host 网络模式
+  # zlm:
+  #   image: zlmediakit/zlmediakit:master
+  #   pull_policy: if_not_present
+  #   container_name: zlm_media_server
+  #   restart: always
+  #   network_mode: host
+
+  # # 新增的 MinIO 云存储底层服务器
+  # minio:
+  #   image: minio/minio:latest
+  #   pull_policy: if_not_present
+  #   container_name: minio_storage_server
+  #   restart: always
+  #   network_mode: host
+  #   environment:
+  #     - MINIO_ROOT_USER=minioadmin
+  #     - MINIO_ROOT_PASSWORD=minioadmin
+  #   # 在 9000 端口提供 API，9001 端口提供 UI
+  #   command: server /data --console-address ":9001"
+  #   volumes:
+  #     - ../minio_data:/data

@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+.venv-win/
+
+# Node / frontend
+node_modules/
+dist/
+
+# Runtime outputs
+artifacts/
+engine_cache/
+runs/
+outputs/
+*.log
+
+# Model weights and generated engines
+*.pt
+*.pth
+*.onnx
+*.engine
+*.plan
+
+# Large media / archives
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.zip
+*.rar
+*.7z
+
+# Native binaries
+*.dll
+*.lib
+*.pyd
+*.so
+*.dylib
+*.exe
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/

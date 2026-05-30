@@ -1,0 +1,47 @@
+services:
+  fight-detection-server:
+    build: .
+    container_name: fight_detection_server
+    restart: always
+    init: true
+    # 这里开启 host 模式（共享宿主网络），main.py 内部启动的 8089 将直接在宿主机开放，
+    # 并且如果系统有 `127.0.0.1:9000` 也能直接连到同处在 host 模式下的 minio。
+    network_mode: host
+    volumes:
+      # 将当前代码映射进容器（以便实时修改 config.yml 或 debug）
+      - .:/workspace
+      # 挂载模型权重目录与字体目录
+      - ./weights:/workspace/weights
+      - ./fonts:/workspace/fonts
+      # 同步宿主机时区
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+    # 扩大容器内 shm_size 虚拟共享内存池，这对于 PyTorch 和 OpenCV 的视频推拉流队列至关重要
+    shm_size: 8g
+    ulimits:
+      core: 0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video, compute, utility]
+
+  # MinIO 云存储底层服务器 (配合 main.py 中的图像存放)
+  # minio:
+  #   image: minio/minio:latest
+  #   pull_policy: if_not_present
+  #   container_name: minio_storage_server
+  #   restart: always
+  #   network_mode: host
+  #   environment:
+  #     - MINIO_ROOT_USER=minioadmin
+  #     - MINIO_ROOT_PASSWORD=minioadmin
+  #   # 在 9000 端口提供基础 S3 API 给 python 代码操作，9001 端口提供 Web UI 给管理员
+  #   command: server /data --console-address ":9001"
+  #   volumes:
+  #     # 与 stream_service 保持一致，把数据持久化存储放在主 yolo_backup 目录下的统一 minio 分区
+  #     - ../minio_data:/data

@@ -1,0 +1,31 @@
+# 模型配置
+model:
+  weights: "drone_person.onnx" # 默认使用的ONNX权重
+  weights_dir: "weights" # 模型存放目录
+  class_names:
+    drone_person: "人"
+    drone_zdjy: "占道经营"
+    drone_car: "汽车"
+    fire: "火焰"
+    smoke: "烟雾"
+    vehicle: "车辆"
+  class_colors:
+    drone_person: [255, 0, 0]     # 红色
+    drone_car: [0, 0, 255]        # 蓝色
+    drone_zdjy: [0, 255, 255]        # 蓝色
+
+# 字体配置
+fonts:
+  dir: "fonts" # 字体存放目录
+  default: "Alimama_ShuHeiTi_Bold.ttf" # 默认字体名称
+# MinIO 配置
+minio:
+  endpoint: "192.168.3.231:9000"
+  access_key: "admin"
+  secret_key: "Sqgs50z@2024!"
+  secure: false
+  bucket_name: "detections" # 存储桶名称
+# 硬件限制配置
+hardware:
+  max_gpu_streams: 0  # 设为 0 时代表交由代码在系统启动时根据物理机器的显存和宿主 CPU 逻辑核心数，全自动推演并分配算力流上限
+  vram_per_stream: 1.5  # 每路检测任务预估需要的显存量(GB)，用于动态分配时判断某张卡是否还有余量

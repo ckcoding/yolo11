@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MMYOLO Trainer Console</title>
+  <link rel="stylesheet" href="/styles.css?v=20260327" />
+</head>
+<body>
+  <main class="console-shell">
+    <section class="topbar panel">
+      <div class="topbar-copy">
+        <p class="eyebrow">MMYOLO Console</p>
+        <h1>小目标训练控制台</h1>
+        <p class="hero-text">保留必要操作：选数据、配参数、发任务、看日志。</p>
+      </div>
+      <div class="topbar-stats">
+        <span class="mini-stat">任务 <strong id="overviewJobCount">0</strong></span>
+        <span class="mini-stat">运行中 <strong id="overviewRunningCount">0</strong></span>
+        <span class="mini-stat">数据集 <strong id="overviewDatasetCount">0</strong></span>
+        <span class="mini-stat">刷新 <strong id="refreshState">ON</strong></span>
+      </div>
+    </section>
+
+    <section class="workspace-grid">
+      <article class="panel command-panel">
+        <div class="panel-header">
+          <div>
+            <p class="section-kicker">Command</p>
+            <h2>新建训练任务</h2>
+          </div>
+          <div class="panel-actions">
+            <button id="loadPresetBtn" class="ghost-btn">加载推荐参数</button>
+            <button id="refreshJobsBtn" class="ghost-btn">刷新任务</button>
+          </div>
+        </div>
+        <form id="jobForm" class="job-form">
+          <section class="form-block">
+            <div class="form-block-head">
+              <h3>基础信息</h3>
+              <p>决定任务名称、基线模型和运行设备。</p>
+            </div>
+            <div class="form-grid">
+              <label>
+                <span>任务名称</span>
+                <input type="text" name="job_name" placeholder="例如 drone_rtmdet_v2" />
+              </label>
+              <label>
+                <span>设备类型</span>
+                <select name="device_type">
+                  <option value="cuda" selected>CUDA (GPU)</option>
+                </select>
+              </label>
+              <label>
+                <span>模型基线</span>
+                <select name="arch">
+                  <option value="rtmdet">RTMDet</option>
+                  <option value="yolov8">YOLOv8</option>
+                </select>
+              </label>
+              <label>
+                <span>Launcher</span>
+                <select name="launcher">
+                  <option value="none">none</option>
+                  <option value="pytorch">pytorch</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-block">
+            <div class="form-block-head">
+              <h3>数据入口</h3>
+              <p>源数据集和预处理后数据都可以直接指定。</p>
+            </div>
+            <div class="form-grid">
+              <label class="span-2">
+                <span>源数据集路径</span>
+                <div class="inline-field">
+                  <input type="text" name="dataset_path" placeholder="/home/dataList/your_dataset" required />
+                  <button type="button" id="inspectDatasetBtn">检查路径</button>
+                </div>
+                <div id="inspectResult" class="inspect-inline muted"></div>
+              </label>
+              <label class="span-2">
+                <span>已准备好的数据集路径</span>
+                <input type="text" name="prepared_dataset_path" placeholder="可留空，留空则自动准备数据" />
+              </label>
+              <label class="span-2">
+                <span>预训练权重</span>
+                <input type="text" name="load_from" placeholder="/path/to/pretrain.pth" />
+              </label>
+            </div>
+          </section>
+
+          <section class="form-block">
+            <div class="form-block-head">
+              <h3>训练参数</h3>
+              <p>先设定切片策略，再调整 batch、epoch 和学习率。</p>
+            </div>
+            <div class="form-grid">
+              <label>
+                <span>图像尺寸</span>
+                <input type="number" name="img_scale" value="1024" />
+              </label>
+              <label>
+                <span>训练轮数</span>
+                <input type="number" name="max_epochs" value="200" />
+              </label>
+              <label>
+                <span>切片尺寸</span>
+                <input type="number" name="tile_size" value="1280" />
+              </label>
+              <label>
+                <span>切片重叠</span>
+                <input type="number" name="tile_overlap" value="320" />
+              </label>
+              <label>
+                <span>最小相交比例</span>
+                <input type="number" name="min_intersection_ratio" step="0.05" value="0.4" />
+              </label>
+              <label>
+                <span>最小框边长</span>
+                <input type="number" name="min_bbox_side" step="0.5" value="2.0" />
+              </label>
+              <label>
+                <span>空切片上限</span>
+                <input type="number" name="max_empty_tiles" value="2" />
+              </label>
+              <label>
+                <span>设备编号</span>
+                <input type="text" name="device_visible_ids" value="0" />
+              </label>
+              <label>
+                <span>训练 Batch</span>
+                <input type="number" name="train_batch_size" value="8" />
+              </label>
+              <label>
+                <span>验证 Batch</span>
+                <input type="number" name="val_batch_size" value="4" />
+              </label>
+              <label>
+                <span>训练 Workers</span>
+                <input type="number" name="train_workers" value="4" />
+              </label>
+              <label>
+                <span>验证 Workers</span>
+                <input type="number" name="val_workers" value="2" />
+              </label>
+              <label>
+                <span>基础学习率</span>
+                <input type="number" name="base_lr" step="0.0001" value="0.004" />
+              </label>
+              <label class="span-2">
+                <span>额外训练参数</span>
+                <input type="text" name="extra_train_args" placeholder="例如 --amp --resume" />
+              </label>
+            </div>
+          </section>
+
+          <section class="toggle-row">
+            <label class="toggle-card">
+              <input type="checkbox" name="prepare_dataset" checked />
+              <span class="toggle-copy">
+                <strong>自动准备数据集</strong>
+                <small>自动执行切片、转换和 COCO 整理。</small>
+              </span>
+            </label>
+            <label class="toggle-card">
+              <input type="checkbox" name="overwrite_prepared" checked />
+              <span class="toggle-copy">
+                <strong>覆盖已有输出</strong>
+                <small>允许复用目标目录并覆盖旧产物。</small>
+              </span>
+            </label>
+          </section>
+
+          <div class="submit-row">
+            <button type="submit" class="primary-btn wide-btn">启动训练任务</button>
+          </div>
+        </form>
+      </article>
+
+      <article class="panel discover-panel">
+        <div class="panel-header">
+          <div>
+            <p class="section-kicker">Dataset</p>
+            <h2>数据集发现</h2>
+          </div>
+          <div class="panel-actions">
+            <button id="scanDatasetsBtn" class="primary-btn">扫描数据集</button>
+            <button id="scanRefreshBtn" class="ghost-btn">刷新</button>
+          </div>
+        </div>
+        <div id="scanStatus" class="scan-status scanning">正在加载数据集...</div>
+        <div id="datasetGrid" class="dataset-grid"></div>
+      </article>
+    </section>
+
+    <section class="monitor-grid">
+      <article class="panel jobs-panel">
+        <div class="panel-header">
+          <div>
+            <p class="section-kicker">Queue</p>
+            <h2>任务列表</h2>
+          </div>
+          <span class="panel-subtitle">点击卡片切换详情</span>
+        </div>
+        <div class="jobs-toolbar">
+          <div class="job-filters" id="jobFilters">
+            <button type="button" class="job-filter-btn active" data-filter="all">全部</button>
+            <button type="button" class="job-filter-btn" data-filter="running">运行中</button>
+            <button type="button" class="job-filter-btn" data-filter="failed">失败</button>
+            <button type="button" class="job-filter-btn" data-filter="completed">完成</button>
+          </div>
+          <div class="jobs-toolbar-meta" id="jobsToolbarMeta">显示 0 个任务</div>
+        </div>
+        <div id="jobsList" class="jobs-list"></div>
+      </article>
+
+      <article class="panel detail-panel">
+        <div class="panel-header">
+          <div>
+            <p class="section-kicker">Monitor</p>
+            <h2>任务详情</h2>
+          </div>
+          <div class="panel-actions">
+            <button id="stopJobBtn" class="danger-btn" disabled>停止任务</button>
+            <button id="reloadDetailBtn" class="ghost-btn" disabled>刷新详情</button>
+            <button id="toggleAutoRefreshBtn" class="ghost-btn">暂停自动刷新</button>
+          </div>
+        </div>
+        <div id="jobDetail" class="detail-grid muted">还没有选中任务。</div>
+        <div class="log-header">
+          <h3>实时日志</h3>
+          <span class="panel-subtitle">自动滚动到末尾</span>
+        </div>
+        <pre id="logViewer" class="log-viewer">等待任务日志...</pre>
+      </article>
+    </section>
+  </main>
+
+  <script src="/app.js?v=20260327"></script>
+</body>
+</html>
