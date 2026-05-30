@@ -94,11 +94,52 @@ def _load_label_display_names():
     return normalized
 
 
+def _normalize_rgb_color(raw_color):
+    if isinstance(raw_color, str):
+        value = raw_color.strip()
+        if value.startswith("#") and len(value) == 7:
+            try:
+                return tuple(int(value[index:index + 2], 16) for index in (1, 3, 5))
+            except ValueError:
+                return None
+        parts = [part.strip() for part in value.split(",")]
+        if len(parts) == 3:
+            try:
+                return tuple(max(0, min(255, int(part))) for part in parts)
+            except ValueError:
+                return None
+    if isinstance(raw_color, (list, tuple)) and len(raw_color) == 3:
+        try:
+            return tuple(max(0, min(255, int(part))) for part in raw_color)
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _load_label_colors():
+    raw_mapping = get_conf("labels", "colors", {})
+    if not isinstance(raw_mapping, dict):
+        return {}
+
+    normalized = {}
+    for raw_label, raw_color in raw_mapping.items():
+        label = str(raw_label).strip()
+        color = _normalize_rgb_color(raw_color)
+        if label and color:
+            normalized[label] = color
+    return normalized
+
+
 LABEL_DISPLAY_NAMES = _load_label_display_names()
+LABEL_COLORS = _load_label_colors()
 
 
 def get_label_display_name(label: str) -> str:
     return LABEL_DISPLAY_NAMES.get(str(label).strip(), str(label).strip())
+
+
+def get_label_color(label: str):
+    return LABEL_COLORS.get(str(label).strip())
 
 
 def resolve_path(raw_path):

@@ -810,8 +810,8 @@
             conf_thres: 0.25
           },
           modelOptions: [
-            { id: 'drone_people', name: '人员检测', model_id: 'drone_person' },
-            { id: 'drone_car', name: '车辆检测', model_id: 'drone_car' }
+            { id: 'drone_people', name: '人员', model_id: 'drone_person' },
+            { id: 'drone_car', name: '车', model_id: 'drone_car' }
           ],
           selectedLabels: ['drone_people', 'drone_car'],
           activeTask: {},
@@ -841,10 +841,10 @@
           return String(name || '?').slice(0, 1);
         },
         normalizeName(item) {
-          if (item.id === 'drone_people') return '人员检测';
-          if (item.id === 'drone_car') return '车辆检测';
-          if (item.id === 'drone_fire') return '火灾检测';
-          if (item.id === 'drone_smokes') return '烟雾检测';
+          if (item.id === 'drone_people') return item.name || '人员';
+          if (item.id === 'drone_car') return item.name || '车';
+          if (item.id === 'drone_fire') return item.name || '火灾';
+          if (item.id === 'drone_smokes') return item.name || '烟雾';
           if (item.id === 'drone_zdjy') return '占道经营';
           return item.name || item.id;
         },

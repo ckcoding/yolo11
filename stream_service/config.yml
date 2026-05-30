@@ -87,9 +87,15 @@ minio:
 # 4. 标签显示名
 labels:
   display_names:
-    drone_people: "人员检测"
-    drone_car: "车辆"
+    drone_people: "人员"
+    drone_car: "车"
     drone_zdjy: "占道经营"
     drone_smokes: "烟雾"
     drone_fire: "火灾"
+  colors:
+    drone_people: "#00D1FF"
+    drone_car: "#00FF66"
+    drone_zdjy: "#FFD000"
+    drone_smokes: "#A855F7"
+    drone_fire: "#FF3B30"
     

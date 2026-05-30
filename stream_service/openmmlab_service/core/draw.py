@@ -3,12 +3,17 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import os
-from openmmlab_service.config import FONT_PATH
+from openmmlab_service.config import FONT_PATH, get_label_color
 
 class_colors = {}
 
 def get_color_for_class(class_name: str):
     """自动给类目分配颜色缓存映射"""
+    configured_color = get_label_color(class_name)
+    if configured_color is not None:
+        red, green, blue = configured_color
+        return (blue, green, red)
+
     if class_name not in class_colors:
         import colorsys
         h = random.random()
@@ -100,9 +105,7 @@ def cv2_draw_chinese_batch(img, all_boxes, target_classes, show_confidence=True)
             y2 = int(b3)
             y2 = y2 if y2 < img_h else img_h - 1
 
-            color = class_colors.get(label_en)
-            if color is None:
-                color = get_color_fallback(label_en)
+            color = get_color_fallback(label_en)
 
             cn_label = target_classes.get(label_en)
             if cn_label is None:
