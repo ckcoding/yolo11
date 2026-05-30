@@ -20,6 +20,7 @@ artifacts/
 engine_cache/
 runs/
 outputs/
+mmyolo_small_object/runtime/
 *.log
 
 # Model weights and generated engines
