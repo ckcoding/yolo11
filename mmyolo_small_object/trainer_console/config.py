@@ -8,6 +8,11 @@ MMYOLO_ROOT = Path(__file__).resolve().parents[1]
 PROJECT_ROOT = Path(os.getenv('TRAINER_PROJECT_ROOT', MMYOLO_ROOT.parent)).resolve()
 STATE_ROOT = Path(os.getenv('TRAINER_STATE_ROOT', MMYOLO_ROOT / 'runtime')).resolve()
 STATIC_ROOT = MMYOLO_ROOT / 'trainer_console' / 'static' / 'dist'
+if not (STATIC_ROOT / 'index.html').exists():
+    STATIC_ROOT = MMYOLO_ROOT / 'trainer_console' / 'static'
+STATIC_INDEX = STATIC_ROOT / 'index.html'
+if STATIC_ROOT.name == 'static' and (STATIC_ROOT / 'index.legacy.html').exists():
+    STATIC_INDEX = STATIC_ROOT / 'index.legacy.html'
 
 HOST = os.getenv('TRAINER_HOST', '0.0.0.0')
 PORT = int(os.getenv('TRAINER_PORT', '18080'))

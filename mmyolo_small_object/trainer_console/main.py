@@ -16,6 +16,7 @@ from trainer_console.config import (
     HOST,
     PORT,
     RELOAD,
+    STATIC_INDEX,
     STATIC_ROOT,
 )
 from trainer_console.dataset_utils import inspect_dataset_structure
@@ -208,10 +209,20 @@ def scan_datasets_at_path(request: ScanPathRequest) -> dict:
 
 @app.get('/')
 def index() -> FileResponse:
-    return FileResponse(STATIC_ROOT / 'index.html')
+    return FileResponse(STATIC_INDEX)
 
 
-app.mount('/', StaticFiles(directory=str(STATIC_ROOT), html=True), name='static')
+@app.get('/app.js')
+def app_js() -> FileResponse:
+    return FileResponse(STATIC_ROOT / 'app.js')
+
+
+@app.get('/styles.css')
+def styles_css() -> FileResponse:
+    return FileResponse(STATIC_ROOT / 'styles.css')
+
+
+app.mount('/static', StaticFiles(directory=str(STATIC_ROOT), html=True), name='static')
 
 
 if __name__ == '__main__':

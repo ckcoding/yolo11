@@ -10,6 +10,7 @@ __pycache__/
 .venv/
 venv/
 .venv-win/
+.venv-console/
 
 # Node / frontend
 node_modules/
